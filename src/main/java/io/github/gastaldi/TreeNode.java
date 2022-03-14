@@ -1,14 +1,15 @@
 package io.github.gastaldi;
 
+import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Objects;
 
-class TreeNode {
+class TreeNode implements Comparable<TreeNode>{
 
     final String name;
-    final List<TreeNode> children;
+    final Collection<TreeNode> children;
 
-    public TreeNode(String name, List<TreeNode> children) {
+    public TreeNode(String name, Collection<TreeNode> children) {
         this.name = name;
         this.children = children;
     }
@@ -18,6 +19,7 @@ class TreeNode {
         print(buffer, "", "");
         return buffer.toString();
     }
+
 
     private void print(StringBuilder buffer, String prefix, String childrenPrefix) {
         buffer.append(prefix);
@@ -32,5 +34,24 @@ class TreeNode {
                     next.print(buffer, childrenPrefix + "└── ", childrenPrefix + "    ");
                 }
             }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+        TreeNode treeNode = (TreeNode) o;
+        return name.equals(treeNode.name) && Objects.equals(children, treeNode.children);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name);
+    }
+
+    @Override public int compareTo(TreeNode o) {
+        return name.compareTo(o.name);
     }
 }

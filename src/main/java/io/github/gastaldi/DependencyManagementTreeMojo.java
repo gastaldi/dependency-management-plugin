@@ -19,9 +19,9 @@ import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.List;
+import java.util.TreeSet;
 
 /**
  * List the dependency management as a tree
@@ -53,15 +53,15 @@ public class DependencyManagementTreeMojo
             throw new MojoExecutionException(e);
         }
         DependencyManagement dependencyManagement = originalModel.getDependencyManagement();
-        List<TreeNode> children = null;
+        Collection<TreeNode> children = null;
         if (dependencyManagement != null) {
             children = children(dependencyManagement.getDependencies());
         }
         System.out.println(new TreeNode(mavenProject.getArtifact().toString(), children));
     }
 
-    private List<TreeNode> children(List<Dependency> dependencies) throws MojoExecutionException {
-        List<TreeNode> children = new ArrayList<>();
+    private Collection<TreeNode> children(List<Dependency> dependencies) throws MojoExecutionException {
+        Collection<TreeNode> children = new TreeSet<>();
         for (Dependency dependency : dependencies) {
             TreeNode node = new TreeNode(toArtifactDescription(dependency), null);
             if ("import".equalsIgnoreCase(dependency.getScope())) {

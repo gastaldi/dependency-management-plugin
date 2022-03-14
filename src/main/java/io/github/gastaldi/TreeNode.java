@@ -23,13 +23,14 @@ class TreeNode {
         buffer.append(prefix);
         buffer.append(name);
         buffer.append('\n');
-        for (Iterator<TreeNode> it = children.iterator(); it.hasNext();) {
-            TreeNode next = it.next();
-            if (it.hasNext()) {
-                next.print(buffer, childrenPrefix + "├── ", childrenPrefix + "│   ");
-            } else {
-                next.print(buffer, childrenPrefix + "└── ", childrenPrefix + "    ");
+        if (children != null)
+            for (Iterator<TreeNode> it = children.iterator(); it.hasNext(); ) {
+                TreeNode next = it.next();
+                if (it.hasNext()) {
+                    next.print(buffer, childrenPrefix + "├── ", childrenPrefix + "│   ");
+                } else {
+                    next.print(buffer, childrenPrefix + "└── ", childrenPrefix + "    ");
+                }
             }
-        }
     }
 }

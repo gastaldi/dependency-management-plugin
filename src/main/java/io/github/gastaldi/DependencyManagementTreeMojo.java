@@ -1,44 +1,27 @@
 package io.github.gastaldi;
 
-import com.sun.source.tree.Tree;
-import edu.emory.mathcs.backport.java.util.Collections;
-import org.apache.maven.artifact.resolver.DefaultArtifactResolver;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.profiles.DefaultProfileManager;
-import org.apache.maven.profiles.ProfileManager;
 import org.apache.maven.project.DefaultProjectBuilderConfiguration;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.ModelUtils;
-import org.apache.maven.project.ProjectBuilderConfiguration;
 import org.apache.maven.project.interpolation.ModelInterpolationException;
 import org.apache.maven.project.interpolation.ModelInterpolator;
-import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
-import org.apache.maven.settings.Settings;
-import org.eclipse.aether.DefaultRepositorySystemSession;
-import org.eclipse.aether.RepositorySystem;
-import org.eclipse.aether.RepositorySystemSession;
-import org.eclipse.aether.artifact.DefaultArtifact;
-import org.eclipse.aether.collection.DependencyManager;
-import org.eclipse.aether.repository.LocalRepositoryManager;
-import org.eclipse.aether.resolution.ArtifactDescriptorResult;
-import org.eclipse.aether.resolution.ArtifactRequest;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
-import org.eclipse.aether.resolution.ArtifactResult;
 
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * List the dependency management as a tree
@@ -46,6 +29,9 @@ import java.util.stream.Collectors;
 @Mojo(name = "tree", requiresProject = true)
 public class DependencyManagementTreeMojo
         extends AbstractMojo {
+
+    private static final String MAVEN_CENTRAL = "https://repo1.maven.org/maven2/";
+
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject mavenProject;
 
@@ -55,21 +41,71 @@ public class DependencyManagementTreeMojo
     @Parameter(defaultValue = "${project.basedir}", readonly = true)
     File projectLocation;
 
+    static final MavenXpp3Reader MAVEN_READER = new MavenXpp3Reader();
+
     @Override
     public void execute()
             throws MojoExecutionException {
         Model originalModel;
         try {
-            originalModel = modelInterpolator.interpolate(mavenProject.getOriginalModel(), projectLocation,
-                    new DefaultProjectBuilderConfiguration(), false);
+            originalModel = interpolateModel(mavenProject.getOriginalModel());
         } catch (ModelInterpolationException e) {
-            throw new MojoExecutionException("Error while interpolating values", e);
+            throw new MojoExecutionException(e);
         }
-        List<Dependency> dependencies = originalModel.getDependencyManagement().getDependencies();
-        TreeNode root = new TreeNode(mavenProject.getArtifact().toString(), dependencies.stream()
-                .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion())
-                .map(name -> new TreeNode(name, List.of()))
-                .collect(Collectors.toList()));
-        System.out.println(root);
+        DependencyManagement dependencyManagement = originalModel.getDependencyManagement();
+        List<TreeNode> children = null;
+        if (dependencyManagement != null) {
+            children = children(dependencyManagement.getDependencies());
+        }
+        System.out.println(new TreeNode(mavenProject.getArtifact().toString(), children));
+    }
+
+    private List<TreeNode> children(List<Dependency> dependencies) throws MojoExecutionException {
+        List<TreeNode> children = new ArrayList<>();
+        for (Dependency dependency : dependencies) {
+            TreeNode node = new TreeNode(toArtifactDescription(dependency), null);
+            if ("import".equalsIgnoreCase(dependency.getScope())) {
+                // Recursive
+                Model model = resolveModel(dependency);
+                DependencyManagement dependencyManagement = model.getDependencyManagement();
+                children.add(new TreeNode(toArtifactDescription(dependency), children(
+                        dependencyManagement != null ? dependencyManagement.getDependencies() : null)));
+            } else {
+                children.add(new TreeNode(toArtifactDescription(dependency), null));
+            }
+        }
+        return children;
+    }
+
+    private Model resolveModel(Dependency dependency) throws MojoExecutionException {
+        //TODO: Use insanely complex maven resolver API for this
+        URL url = null;
+        try {
+            url = new URL(MessageFormat.format("{0}{1}/{2}/{3}/{2}-{3}.{4}",
+                    MAVEN_CENTRAL,
+                    dependency.getGroupId().replace('.', '/'),
+                    dependency.getArtifactId(),
+                    dependency.getVersion(),
+                    dependency.getType()));
+        } catch (MalformedURLException e) {
+            throw new MojoExecutionException(e);
+        }
+
+        try (InputStream is = url.openStream()) {
+            Model model = MAVEN_READER.read(is);
+            return interpolateModel(model);
+        } catch (Exception e) {
+            throw new MojoExecutionException(e);
+        }
+    }
+
+    private Model interpolateModel(Model model) throws ModelInterpolationException {
+        return modelInterpolator.interpolate(model, projectLocation,
+                    new DefaultProjectBuilderConfiguration(), false);
+    }
+
+    private String toArtifactDescription(Dependency dependency) {
+        //io.quarkus:quarkus-resteasy-server-common:jar:2.7.4.Final:compile
+        return String.format("%s:%s:%s:%s", dependency.getGroupId(), dependency.getArtifactId(), dependency.getType(), dependency.getVersion());
     }
 }
